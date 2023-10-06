@@ -12,6 +12,7 @@
 
 #include "esp_http_client.h"
 #include "connect_wifi.h"
+#include "lcd.h"
 
 static const char *TAG = "HTTP_CLIENT";
 
@@ -36,6 +37,40 @@ unsigned int getOximetryData(void)
 	int data = oximetryData[currentIndex];
 	currentIndex = (currentIndex + 1) % dataSize;
     return data;
+}
+
+void lcd_task(void *pvParameters)
+{
+    /* Create LCD object */
+    lcd_t lcd;
+
+    /* Set default pinout */
+    lcdDefault(&lcd);
+
+    /* Initialize LCD object */
+    lcdInit(&lcd);
+
+    /* Clear previous data on LCD */
+    lcdClear(&lcd);
+    while (1)
+    {
+        char buffer[16];
+        
+        unsigned int pulse = getPulseData();
+        unsigned int oximetry = getOximetryData();
+        
+        sprintf(buffer, "Pulse: %u", pulse);
+        lcd_err_t ret = lcdSetText(&lcd, buffer, 0, 0);
+        assert_lcd(ret);
+
+        sprintf(buffer, "Oximetry: %u", oximetry);
+        ret = lcdSetText(&lcd, buffer, 0, 1);
+        assert_lcd(ret);
+
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+    // Free LCD if and when task is being deleted
+    lcdFree(&lcd);
 }
 
 
@@ -103,4 +138,6 @@ void app_main(void)
 	{
 		xTaskCreate(thingspeak_send_data, "thingspeak_send_data", 8192, NULL, 6, NULL);
 	}
+    // Start the LCD task regardless of WiFi status
+    xTaskCreate(lcd_task, "lcd_task", 2048, NULL, 4, NULL);
 }
